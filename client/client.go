@@ -2,12 +2,15 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
 )
@@ -97,4 +100,58 @@ func (c *Client) SendTransaction(tx *types.Transaction) (*string, error) {
 	txHash := receipt.TxHash.Hex()
 
 	return &txHash, nil
+}
+
+func (c *Client) ReadLogs(
+	fromBlock *big.Int,
+	toBlock *big.Int,
+	contractABI abi.ABI,
+	contractAddress common.Address,
+	topicFilters [][]string,
+) ([]interface{}, error) {
+	topicHashes := make([][]common.Hash, len(topicFilters))
+	for i, topicsAtI := range topicFilters {
+		topicHashes[i] = make([]common.Hash, len(topicsAtI))
+
+		for j, topicHex := range topicsAtI {
+			if i == 0 {
+				topicHashes[i][j] = crypto.Keccak256Hash([]byte(topicHex))
+			} else {
+				topicHashes[i][j] = common.HexToHash(topicHex)
+			}
+		}
+	}
+
+	filter := ethereum.FilterQuery{
+		FromBlock: fromBlock,
+		ToBlock:   toBlock,
+		Addresses: []common.Address{contractAddress},
+		Topics:    topicHashes,
+	}
+
+	abiEvent, err := contractABI.EventByID(topicHashes[0][0])
+	if err != nil {
+		return nil, err
+	}
+
+	logs, err := c.EthClient.FilterLogs(context.Background(), filter)
+	if err != nil {
+		return nil, err
+	}
+
+	logFields := []interface{}{} // Could be optimized by pre-allocating some capacity
+
+	for _, log := range logs {
+		for _, topic := range log.Topics {
+			logFields = append(logFields, topic.Hex())
+		}
+
+		data, err := contractABI.Unpack(abiEvent.RawName, log.Data)
+		if err != nil {
+			return nil, err
+		}
+		logFields = append(logFields, data...)
+	}
+
+	return logFields, nil
 }
