@@ -3,6 +3,7 @@ module github.com/0xNSHuman/dapp-tools
 go 1.19
 
 require (
+	github.com/arriqaaq/merkletree v0.0.0-20220506035246-b0c03582f93e
 	github.com/ethereum/go-ethereum v1.10.26
 	github.com/tyler-smith/go-bip32 v1.0.0
 )
