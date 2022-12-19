@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"strings"
 
 	"github.com/0xNSHuman/dapp-tools/apps"
 	"github.com/0xNSHuman/dapp-tools/apps/scoretable"
+	"github.com/0xNSHuman/dapp-tools/client"
 	"github.com/0xNSHuman/dapp-tools/ui"
 	"github.com/0xNSHuman/dapp-tools/wallet"
 )
@@ -62,6 +64,14 @@ func handleWalletCommand(args []string) {
 	switch args[0] {
 	case "create":
 		executeWalletCreateCommand(args[1:])
+	case "pubkey":
+		executeWalletPubkeyCommand(args[1:])
+	case "export":
+		executeWalletExportCommand(args[1:])
+	case "import":
+		executeWalletImportCommand(args[1:])
+	case "balance":
+		executeWalletBalanceCommand(args[1:])
 	default:
 		fmt.Println("Invalid command usage")
 		return
@@ -99,6 +109,144 @@ func executeWalletCreateCommand(args []string) {
 	}
 
 	fmt.Println("Wallet created! Public address:", pubkey)
+}
+
+func executeWalletPubkeyCommand(args []string) {
+	if len(args) == 0 {
+		fmt.Println("Invalid command usage")
+		return
+	}
+
+	passphrase := findArg(args, "--pwd=")
+
+	if passphrase == nil {
+		fmt.Println("--pwd parameter is required")
+		return
+	}
+
+	walletKeeper, err := wallet.NewWalletKeeper(walletCLI)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	pubkey, err := walletKeeper.PublicKey()
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	fmt.Println("Public address:", pubkey)
+}
+
+func executeWalletExportCommand(args []string) {
+	if len(args) == 0 {
+		fmt.Println("Invalid command usage")
+		return
+	}
+
+	passphrase := findArg(args, "--pwd=")
+
+	if passphrase == nil {
+		fmt.Println("--pwd parameter is required")
+		return
+	}
+
+	walletKeeper, err := wallet.NewWalletKeeper(walletCLI)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	privateKey, err := walletKeeper.ExportWallet(wallet.ExportModePrivateKey, *passphrase)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	fmt.Println("Private key:", common.Bytes2Hex(privateKey))
+}
+
+func executeWalletImportCommand(args []string) {
+	if len(args) == 0 {
+		fmt.Println("Invalid command usage")
+		return
+	}
+
+	passphrase := findArg(args, "--pwd=")
+	privateKey := findArg(args, "--privateKey=")
+
+	if passphrase == nil {
+		fmt.Println("--pwd parameter is required")
+		return
+	}
+	if privateKey == nil {
+		fmt.Println("--privateKey parameter is required")
+		return
+	}
+
+	walletKeeper, err := wallet.NewWalletKeeper(walletCLI)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	err = walletKeeper.ImportWallet(wallet.ImportModePrivateKey, common.Hex2Bytes(*privateKey), *passphrase)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	pubkey, err := walletKeeper.PublicKey()
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	fmt.Println("Wallet imported! Public address:", pubkey)
+}
+
+func executeWalletBalanceCommand(args []string) {
+	if len(args) == 0 {
+		fmt.Println("Invalid command usage")
+		return
+	}
+
+	rpcEndpoint := findArg(args, "--rpc=")
+	passphrase := findArg(args, "--pwd=")
+
+	if passphrase == nil {
+		fmt.Println("--pwd parameter is required")
+		return
+	}
+	if rpcEndpoint == nil {
+		fmt.Println("--rpc parameter is required")
+		return
+	}
+
+	walletKeeper, err := wallet.NewWalletKeeper(walletCLI)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	pubkey, err := walletKeeper.PublicKey()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	client, err := client.NewClient(*rpcEndpoint)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	balance, err := client.EthClient.BalanceAt(context.Background(), common.HexToAddress(pubkey), nil)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	fmt.Println("Address balance:", balance)
 }
 
 // +++++++++++++++++++++++++++++++++++++++
