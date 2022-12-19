@@ -5,8 +5,10 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/0xNSHuman/dapp-tools/common"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
+	gethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/tyler-smith/go-bip32"
@@ -18,6 +20,7 @@ type WalletAPI interface {
 	ExportWallet(mode ExportMode, passphrase string) ([]byte, error)
 	PublicKey() (string, error)
 	SignTransaction() ([]byte, error)
+	DeleteWallet(passphrase string) error
 }
 
 type WalletUI interface {
@@ -49,21 +52,19 @@ func NewWalletKeeper(ui WalletUI) (*WalletKeeper, error) {
 }
 
 func (wk *WalletKeeper) CreateWallet(passphrase string) error {
-	for _, acc := range wk.ks.Accounts() {
-		err := wk.ks.Delete(acc, passphrase)
-		if err != nil {
-			return err
-		}
-	}
+	wk.DeleteWallet(passphrase)
 
 	_, error := wk.ks.NewAccount(passphrase)
+
 	return error
 }
 
 func (wk *WalletKeeper) ImportWallet(mode ImportMode, input []byte, passphrase string) error {
+	wk.DeleteWallet(passphrase)
+
 	switch mode {
 	case ImportModePrivateKey:
-		privKey, err := crypto.HexToECDSA(string(input))
+		privKey, err := crypto.HexToECDSA(gethcommon.Bytes2Hex(input))
 		if err != nil {
 			return InvalidPrivateKey
 		}
@@ -97,7 +98,24 @@ func (wk *WalletKeeper) ExportWallet(mode ExportMode, passphrase string) ([]byte
 	}
 
 	// TODO: Require a pwd change?
-	return wk.ks.Export(accs[0], passphrase, passphrase)
+	keyJSON, err := wk.ks.Export(accs[0], passphrase, passphrase)
+	if err != nil {
+		return nil, err
+	}
+
+	switch mode {
+	case ExportModePrivateKey:
+		key, err := keystore.DecryptKey(keyJSON, passphrase)
+		if err != nil {
+			return nil, err
+		}
+
+		return crypto.FromECDSA(key.PrivateKey), nil
+	case ExportModeSeedPhrase:
+		return nil, common.NotSupported
+	}
+
+	panic(common.NotSupported)
 }
 
 func (wk *WalletKeeper) PublicKey() (string, error) {
@@ -135,4 +153,15 @@ func (wk *WalletKeeper) SignTransaction(chainId *big.Int, tx *types.Transaction)
 	wk.ks.Lock(accs[0].Address)
 
 	return signedTx, nil
+}
+
+func (wk *WalletKeeper) DeleteWallet(passphrase string) error {
+	for _, acc := range wk.ks.Accounts() {
+		err := wk.ks.Delete(acc, passphrase)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
