@@ -8,9 +8,11 @@ import (
 
 	"github.com/0xNSHuman/dapp-tools/apps"
 	"github.com/0xNSHuman/dapp-tools/apps/scoretable"
+	"github.com/0xNSHuman/dapp-tools/apps/soundminter"
 	"github.com/0xNSHuman/dapp-tools/client"
 	"github.com/0xNSHuman/dapp-tools/ui"
 	"github.com/0xNSHuman/dapp-tools/wallet"
+	"github.com/ethereum/go-ethereum/common"
 )
 
 var (
@@ -308,12 +310,60 @@ func handleAppCommand(args []string) {
 	}
 
 	switch args[0] {
+	case "soundminter":
+		handlAppSoundminterCommand(args[1:])
 	case "scoretable":
 		handlAppScoretableCommand(args[1:])
 	default:
 		fmt.Println("Invalid command usage")
 		return
 	}
+}
+
+func handlAppSoundminterCommand(args []string) {
+	if len(args) == 0 {
+		fmt.Println("Invalid command usage")
+		return
+	}
+
+	switch args[0] {
+	case "automint":
+		executeAppSoundminterAutomint(args[1:])
+	default:
+		fmt.Println("Invalid command usage")
+		return
+	}
+}
+
+func executeAppSoundminterAutomint(args []string) {
+	if len(args) == 0 {
+		fmt.Println("Invalid command usage")
+		return
+	}
+
+	rpcEndpoint := findArg(args, "--rpc=")
+
+	if rpcEndpoint == nil {
+		fmt.Println("--rpc parameter is required")
+		return
+	}
+
+	soundminter, err := soundminter.NewSoundminter(
+		*rpcEndpoint,
+		walletCLI,
+		common.HexToAddress("0xd19a5eE68e2ED7C19d509b6F4EcAd7409e79Ad58"),
+	)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	_, err = soundminter.Automint()
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	fmt.Println("Execution completed")
 }
 
 func handlAppScoretableCommand(args []string) {
