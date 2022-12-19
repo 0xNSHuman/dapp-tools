@@ -67,6 +67,17 @@ func (c *Client) CreateTransaction(msg ethereum.CallMsg) (*types.Transaction, er
 	toAddress := msg.To
 	value := msg.Value
 
+	if gasLimit == 0 {
+		return nil, GasEstimateFailed
+	}
+
+	gasCost := gasPrice.Mul(gasPrice, big.NewInt(int64(gasLimit)))
+
+	fmt.Println("Gas cost estimate:", gasCost, "wei")
+	fmt.Println("Gas limit:", gasLimit)
+	fmt.Println("Gas price:", gasPrice, "wei")
+	fmt.Println("Gas tip:", gasTip, "wei")
+
 	txData := &types.DynamicFeeTx{
 		ChainID:   chainId,
 		Nonce:     nonce,

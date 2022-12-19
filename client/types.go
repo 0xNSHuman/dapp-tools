@@ -9,6 +9,7 @@ type ClientError uint
 const (
 	Unknown ClientError = common.ErrorDomainWallet + iota
 	BadRPCConnection
+	GasEstimateFailed
 	TransactionFailed
 )
 
@@ -18,6 +19,8 @@ func (e ClientError) Error() string {
 		return "Bad RPC connection"
 	case TransactionFailed:
 		return "Transaction failed"
+	case GasEstimateFailed:
+		return "Gas estimate failed"
 	default:
 		return "Unknown"
 	}
