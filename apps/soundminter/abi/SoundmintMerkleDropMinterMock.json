@@ -1,0 +1,35 @@
+[
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "edition",
+        "type": "address"
+      },
+      {
+        "internalType": "uint128",
+        "name": "mintId",
+        "type": "uint128"
+      },
+      {
+        "internalType": "uint32",
+        "name": "requestedQuantity",
+        "type": "uint32"
+      },
+      {
+        "internalType": "bytes32[]",
+        "name": "merkleProof",
+        "type": "bytes32[]"
+      },
+      {
+        "internalType": "address",
+        "name": "affiliate",
+        "type": "address"
+      }
+    ],
+    "name": "mint",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  }
+]
