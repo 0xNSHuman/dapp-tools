@@ -7,6 +7,7 @@ const (
 	ErrorDomainMeta
 	ErrorDomainClient
 	ErrorDomainWallet
+	ErrorDomainSchedule
 )
 
 type MetaError uint
