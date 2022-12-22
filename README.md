@@ -12,6 +12,6 @@ dapp-tools
 ├── http        "Data I/O via HTTP"
 ├── schedule    "Job scheduling and async processing"
 ├── ui          "User interface implementations"
-├── utils       "Reusable helpers used in other "packages
+├── utils       "Reusable helpers used in other packages"
 └── wallet      "EVM wallet storage, TX signing, etc."
 ```
