@@ -71,7 +71,7 @@ func (c *Client) CreateTransaction(msg ethereum.CallMsg, gasMultiplier float64) 
 		return nil, GasEstimateFailed
 	}
 
-	gasCost := gasPrice.Mul(gasPrice, big.NewInt(int64(gasLimit)))
+	gasCost := new(big.Int).Mul(gasPrice, big.NewInt(int64(gasLimit)))
 
 	fmt.Println("Gas cost estimate:", gasCost, "wei")
 	fmt.Println("Gas limit:", gasLimit)
