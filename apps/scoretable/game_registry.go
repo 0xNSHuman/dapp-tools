@@ -66,7 +66,7 @@ func (r *GameRegistry) GameCount() (*big.Int, error) {
 }
 
 func (r *GameRegistry) RegisterGame(name string, meta [32]byte) (*string, error) {
-	pubkey, err := r.wallet.PublicKey()
+	pubkey, err := r.wallet.PublicKey(0)
 	if err != nil {
 		return nil, err
 	}

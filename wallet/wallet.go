@@ -1,6 +1,7 @@
 package wallet
 
 import (
+	"fmt"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -43,16 +44,12 @@ func NewWalletKeeper(ui WalletUI) (*WalletKeeper, error) {
 }
 
 func (wk *WalletKeeper) CreateWallet(passphrase string) error {
-	wk.DeleteWallet(passphrase)
-
 	_, error := wk.ks.NewAccount(passphrase)
 
 	return error
 }
 
 func (wk *WalletKeeper) ImportWallet(mode ImportMode, input []byte, passphrase string) error {
-	wk.DeleteWallet(passphrase)
-
 	switch mode {
 	case ImportModePrivateKey:
 		privKey, err := crypto.HexToECDSA(gethcommon.Bytes2Hex(input))
@@ -81,15 +78,14 @@ func (wk *WalletKeeper) ImportWallet(mode ImportMode, input []byte, passphrase s
 	return nil
 }
 
-func (wk *WalletKeeper) ExportWallet(mode ExportMode, passphrase string) ([]byte, error) {
+func (wk *WalletKeeper) ExportWallet(index int, mode ExportMode, passphrase string) ([]byte, error) {
 	accs := wk.ks.Accounts()
-
-	if len(accs) == 0 {
+	if len(accs) <= index {
 		return nil, AccountNotFound
 	}
 
 	// TODO: Require a pwd change?
-	keyJSON, err := wk.ks.Export(accs[0], passphrase, passphrase)
+	keyJSON, err := wk.ks.Export(accs[index], passphrase, passphrase)
 	if err != nil {
 		return nil, err
 	}
@@ -109,20 +105,34 @@ func (wk *WalletKeeper) ExportWallet(mode ExportMode, passphrase string) ([]byte
 	panic(common.NotSupported)
 }
 
-func (wk *WalletKeeper) PublicKey() (string, error) {
-	accs := wk.ks.Accounts()
+func (wk *WalletKeeper) NumberOfAccounts() int {
+	return len(wk.ks.Accounts())
+}
 
-	if len(accs) == 0 {
+func (wk *WalletKeeper) PublicKey(index int) (string, error) {
+	accs := wk.ks.Accounts()
+	if len(accs) <= index {
 		return "", AccountNotFound
 	}
 
-	return accs[0].Address.Hex(), nil
+	return accs[index].Address.Hex(), nil
 }
 
-func (wk *WalletKeeper) SignTransaction(chainId *big.Int, tx *types.Transaction) (*types.Transaction, error) {
 	accs := wk.ks.Accounts()
 
-	if len(accs) == 0 {
+func (wk *WalletKeeper) SignTransaction(
+	chainId *big.Int,
+	tx *types.Transaction,
+	signer gethcommon.Address,
+) (*types.Transaction, error) {
+	var signerAcc accounts.Account = accounts.Account{}
+
+	for _, acc := range wk.ks.Accounts() {
+		if acc.Address == signer {
+			signerAcc = acc
+		}
+	}
+	if signerAcc == (accounts.Account{}) {
 		return nil, AccountNotFound
 	}
 
@@ -131,27 +141,35 @@ func (wk *WalletKeeper) SignTransaction(chainId *big.Int, tx *types.Transaction)
 		return nil, err
 	}
 
-	err = wk.ks.Unlock(accs[0], passphrase)
-	if err != nil {
-		return nil, UnauthorizedAccess
+		err = wk.ks.Unlock(signerAcc, passphrase)
+		if err != nil {
+			return nil, UnauthorizedAccess
+		}
 	}
 
-	signedTx, err := wk.ks.SignTx(accs[0], tx, chainId)
+	fmt.Println("Signing with address:", signerAcc.Address.Hex())
+	fmt.Println()
+
+	signedTx, err := wk.ks.SignTx(signerAcc, tx, chainId)
 	if err != nil {
+		fmt.Println(err)
 		return nil, SigningFailed
 	}
 
-	wk.ks.Lock(accs[0].Address)
+		wk.ks.Lock((signerAcc).Address)
 
 	return signedTx, nil
 }
 
-func (wk *WalletKeeper) DeleteWallet(passphrase string) error {
-	for _, acc := range wk.ks.Accounts() {
-		err := wk.ks.Delete(acc, passphrase)
-		if err != nil {
-			return err
-		}
+func (wk *WalletKeeper) DeleteWallet(index int, passphrase string) error {
+	accs := wk.ks.Accounts()
+	if len(accs) <= index {
+		return AccountNotFound
+	}
+
+	err := wk.ks.Delete(accs[index], passphrase)
+	if err != nil {
+		return err
 	}
 
 	return nil

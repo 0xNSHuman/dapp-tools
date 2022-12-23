@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/0xNSHuman/dapp-tools/apps"
@@ -93,7 +94,7 @@ func executeWalletCreateCommand(args []string) {
 		return
 	}
 
-	walletKeeper, err := wallet.NewWalletKeeper(walletCLI)
+	walletKeeper, err := wallet.NewWalletKeeper(walletCLI, false)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -105,7 +106,7 @@ func executeWalletCreateCommand(args []string) {
 		return
 	}
 
-	pubkey, err := walletKeeper.PublicKey()
+	pubkey, err := walletKeeper.PublicKey(walletKeeper.NumberOfAccounts() - 1)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -120,19 +121,29 @@ func executeWalletPubkeyCommand(args []string) {
 	}
 
 	passphrase := findArg(args, "--pwd=")
+	at := findArg(args, "--at=")
 
 	if passphrase == nil {
 		fmt.Println("--pwd parameter is required")
 		return
 	}
+	if at == nil {
+		fmt.Println("--at parameter is required")
+		return
+	}
+	index, err := strconv.Atoi(*at)
+	if err != nil {
+		fmt.Println("--at parameter must be a valid integer")
+		return
+	}
 
-	walletKeeper, err := wallet.NewWalletKeeper(walletCLI)
+	walletKeeper, err := wallet.NewWalletKeeper(walletCLI, false)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	pubkey, err := walletKeeper.PublicKey()
+	pubkey, err := walletKeeper.PublicKey(index)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -147,19 +158,29 @@ func executeWalletExportCommand(args []string) {
 	}
 
 	passphrase := findArg(args, "--pwd=")
+	at := findArg(args, "--at=")
 
 	if passphrase == nil {
 		fmt.Println("--pwd parameter is required")
 		return
 	}
+	if at == nil {
+		fmt.Println("--at parameter is required")
+		return
+	}
+	index, err := strconv.Atoi(*at)
+	if err != nil {
+		fmt.Println("--at parameter must be a valid integer")
+		return
+	}
 
-	walletKeeper, err := wallet.NewWalletKeeper(walletCLI)
+	walletKeeper, err := wallet.NewWalletKeeper(walletCLI, false)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	privateKey, err := walletKeeper.ExportWallet(wallet.ExportModePrivateKey, *passphrase)
+	privateKey, err := walletKeeper.ExportWallet(index, wallet.ExportModePrivateKey, *passphrase)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -186,7 +207,7 @@ func executeWalletImportCommand(args []string) {
 		return
 	}
 
-	walletKeeper, err := wallet.NewWalletKeeper(walletCLI)
+	walletKeeper, err := wallet.NewWalletKeeper(walletCLI, false)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -198,7 +219,7 @@ func executeWalletImportCommand(args []string) {
 		return
 	}
 
-	pubkey, err := walletKeeper.PublicKey()
+	pubkey, err := walletKeeper.PublicKey(walletKeeper.NumberOfAccounts() - 1)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -214,6 +235,7 @@ func executeWalletBalanceCommand(args []string) {
 
 	rpcEndpoint := findArg(args, "--rpc=")
 	passphrase := findArg(args, "--pwd=")
+	at := findArg(args, "--at=")
 
 	if passphrase == nil {
 		fmt.Println("--pwd parameter is required")
@@ -223,14 +245,23 @@ func executeWalletBalanceCommand(args []string) {
 		fmt.Println("--rpc parameter is required")
 		return
 	}
+	if at == nil {
+		fmt.Println("--at parameter is required")
+		return
+	}
+	index, err := strconv.Atoi(*at)
+	if err != nil {
+		fmt.Println("--at parameter must be a valid integer")
+		return
+	}
 
-	walletKeeper, err := wallet.NewWalletKeeper(walletCLI)
+	walletKeeper, err := wallet.NewWalletKeeper(walletCLI, false)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	pubkey, err := walletKeeper.PublicKey()
+	pubkey, err := walletKeeper.PublicKey(index)
 	if err != nil {
 		fmt.Println(err)
 		return
