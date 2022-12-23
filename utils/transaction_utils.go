@@ -14,13 +14,14 @@ func EncodeTransaction(
 	to common.Address,
 	value *big.Int,
 	calldata []byte,
+	gasMultiplier float64,
 ) (*types.Transaction, error) {
 	callMessage, err := client.CreateCallMessage(from, to, value, calldata)
 	if err != nil {
 		return nil, err
 	}
 
-	tx, err := client.CreateTransaction(*callMessage)
+	tx, err := client.CreateTransaction(*callMessage, gasMultiplier)
 	if err != nil {
 		return nil, err
 	}

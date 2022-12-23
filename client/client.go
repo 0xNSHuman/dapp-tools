@@ -56,13 +56,13 @@ func (c *Client) CreateCallMessage(
 	return msg, nil
 }
 
-func (c *Client) CreateTransaction(msg ethereum.CallMsg) (*types.Transaction, error) {
+func (c *Client) CreateTransaction(msg ethereum.CallMsg, gasMultiplier float64) (*types.Transaction, error) {
 	// TODO: Handle client errors while constructing a transaction
 
 	chainId, _ := c.EthClient.ChainID(context.Background())
 	nonce, _ := c.EthClient.PendingNonceAt(context.Background(), msg.From)
 	gasPrice, _ := c.EthClient.SuggestGasPrice(context.Background())
-	gasTip, _ := c.EthClient.SuggestGasTipCap(context.Background())
+	gasTip, _ := c.gasTip(new(big.Float).SetFloat64(gasMultiplier))
 	gasLimit, _ := c.EthClient.EstimateGas(context.Background(), msg)
 	toAddress := msg.To
 	value := msg.Value
@@ -76,7 +76,8 @@ func (c *Client) CreateTransaction(msg ethereum.CallMsg) (*types.Transaction, er
 	fmt.Println("Gas cost estimate:", gasCost, "wei")
 	fmt.Println("Gas limit:", gasLimit)
 	fmt.Println("Gas price:", gasPrice, "wei")
-	fmt.Println("Gas tip:", gasTip, "wei")
+	fmt.Println("Gas tip (after multiplier):", gasTip, "wei")
+	fmt.Println()
 
 	txData := &types.DynamicFeeTx{
 		ChainID:   chainId,
@@ -165,4 +166,20 @@ func (c *Client) ReadLogs(
 	}
 
 	return logFields, nil
+}
+
+func (c *Client) gasTip(multiplier *big.Float) (*big.Int, error) {
+	gasTip, err := c.EthClient.SuggestGasTipCap(context.Background())
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Println("Gas tip before multiplier:", gasTip)
+
+	gasTipFloat := new(big.Float)
+	gasTipFloat.SetInt(gasTip)
+	gasTipFloat.Mul(gasTipFloat, multiplier)
+	gasTipFloat.Int(gasTip)
+
+	return gasTip, nil
 }

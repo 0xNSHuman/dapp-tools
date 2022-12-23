@@ -80,7 +80,7 @@ func (r *GameRegistry) RegisterGame(name string, meta [32]byte) (*string, error)
 		return nil, err
 	}
 
-	tx, err := utils.EncodeTransaction(r.client, from, to, value, callData)
+	tx, err := utils.EncodeTransaction(r.client, from, to, value, callData, 1.15)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +90,7 @@ func (r *GameRegistry) RegisterGame(name string, meta [32]byte) (*string, error)
 		return nil, err
 	}
 
-	signedTx, err := r.wallet.SignTransaction(chainId, tx)
+	signedTx, err := r.wallet.SignTransaction(chainId, tx, common.Address{}, false)
 	if err != nil {
 		return nil, err
 	}
