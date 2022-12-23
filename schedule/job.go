@@ -30,7 +30,8 @@ func NewPeriodicJobConfig(period time.Duration) JobConfig {
 // ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 type Job struct {
-	id     uint32
+	ID uint32
+
 	config JobConfig
 	task   func()
 }

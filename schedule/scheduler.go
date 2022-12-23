@@ -54,8 +54,8 @@ func NewScheduler() *Scheduler {
 func (s *Scheduler) AddJob(config JobConfig, task func()) (*Job, error) {
 	job := NewJob(nextJobID(), config, task)
 
-	s.jobTable[job.id] = job
-	s.jobStateTable[job.id] = JobStateScheduled
+	s.jobTable[job.ID] = job
+	s.jobStateTable[job.ID] = JobStateScheduled
 	s.queue <- job
 
 	switch job.config.tType {
@@ -108,19 +108,19 @@ func (s *Scheduler) launch() {
 	for {
 		job := <-s.queue
 
-		if s.jobStateTable[job.id] == JobStateCancelled {
+		if s.jobStateTable[job.ID] == JobStateCancelled {
 			// skip cancelled job
 			continue
 		}
 
-		s.jobStateTable[job.id] = JobStateRunning
+		s.jobStateTable[job.ID] = JobStateRunning
 		go s.runJob(job)
 
 		// Before completion
 		switch job.config.tType {
 		case JobTypePeriodic:
 			// job is rescheduled
-			s.jobStateTable[job.id] = JobStateScheduled
+			s.jobStateTable[job.ID] = JobStateScheduled
 		}
 	}
 }
@@ -132,9 +132,9 @@ func (s *Scheduler) runJob(job *Job) {
 	switch job.config.tType {
 	case JobTypePrimitive:
 		// remove the job from the main table
-		delete(s.jobTable, job.id)
+		delete(s.jobTable, job.ID)
 		// but keep the state table growing for the duration of the execution
-		s.jobStateTable[job.id] = JobStateCompleted
+		s.jobStateTable[job.ID] = JobStateCompleted
 	}
 }
 
@@ -145,12 +145,11 @@ func (s *Scheduler) runPeriodWatcher() {
 		newPeriod := <-s.periodReset // new period signaled
 
 		if terminator != nil {
-			terminator <- 0
+			terminator <- 0 // invalidate the prev period
 		} else {
 			terminator = make(chan uint8)
 		}
 
-		// invalidate the prev period
 		ticker := time.NewTicker(time.Duration(newPeriod)).C
 		go s.processPeriodicSchedule(ticker, terminator) // start tracking updated smallest job period
 	}
@@ -166,7 +165,7 @@ func (s *Scheduler) processPeriodicSchedule(ticker <-chan time.Time, terminator 
 
 				// Skip the job if it's cancelled and clean up the schedule
 				// Otherwise reschedule it with new run time
-				if s.jobStateTable[job.id] == JobStateCancelled {
+				if s.jobStateTable[job.ID] == JobStateCancelled {
 					delete(s.jobSchedule, s.nextJobTime)
 				} else {
 					nextPeriodRunTime := s.nextJobTime + job.config.period.Nanoseconds()
