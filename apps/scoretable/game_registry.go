@@ -25,7 +25,7 @@ func NewGameRegistry(
 	client *client.Client,
 	walletUI wallet.WalletUI,
 ) (*GameRegistry, error) {
-	wallet, err := wallet.NewWalletKeeper(walletUI)
+	wallet, err := wallet.NewWalletKeeper(walletUI, false)
 	if err != nil {
 		return nil, err
 	}

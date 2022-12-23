@@ -25,7 +25,7 @@ type WalletKeeper struct {
 	ui WalletUI
 }
 
-func NewWalletKeeper(ui WalletUI) (*WalletKeeper, error) {
+func NewWalletKeeper(ui WalletUI, autoUnlock bool) (*WalletKeeper, error) {
 	userHomeDir, err := os.UserHomeDir()
 	if err != nil {
 		return nil, FileSystemAccess
@@ -34,7 +34,7 @@ func NewWalletKeeper(ui WalletUI) (*WalletKeeper, error) {
 	keystorePath := filepath.Join(userHomeDir, "evm", "wallet", "keystore")
 
 	ks := keystore.NewKeyStore(keystorePath, keystore.StandardScryptN, keystore.StandardScryptP)
-	am := accounts.NewManager(&accounts.Config{InsecureUnlockAllowed: false}, ks)
+	am := accounts.NewManager(&accounts.Config{InsecureUnlockAllowed: autoUnlock}, ks)
 
 	return &WalletKeeper{
 		ks: ks,
@@ -118,12 +118,20 @@ func (wk *WalletKeeper) PublicKey(index int) (string, error) {
 	return accs[index].Address.Hex(), nil
 }
 
+func (wk *WalletKeeper) Unlock(index int, passphrase string) error {
 	accs := wk.ks.Accounts()
+	if len(accs) <= index {
+		return AccountNotFound
+	}
+
+	return wk.ks.TimedUnlock(accs[index], passphrase, 0)
+}
 
 func (wk *WalletKeeper) SignTransaction(
 	chainId *big.Int,
 	tx *types.Transaction,
 	signer gethcommon.Address,
+	autosign bool,
 ) (*types.Transaction, error) {
 	var signerAcc accounts.Account = accounts.Account{}
 
@@ -136,10 +144,11 @@ func (wk *WalletKeeper) SignTransaction(
 		return nil, AccountNotFound
 	}
 
-	passphrase, err := wk.ui.EnterPassphrase()
-	if err != nil {
-		return nil, err
-	}
+	if !autosign {
+		passphrase, err := wk.ui.EnterPassphrase()
+		if err != nil {
+			return nil, err
+		}
 
 		err = wk.ks.Unlock(signerAcc, passphrase)
 		if err != nil {
@@ -156,7 +165,9 @@ func (wk *WalletKeeper) SignTransaction(
 		return nil, SigningFailed
 	}
 
+	if !autosign {
 		wk.ks.Lock((signerAcc).Address)
+	}
 
 	return signedTx, nil
 }
