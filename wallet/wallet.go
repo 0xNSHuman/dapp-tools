@@ -14,15 +14,6 @@ import (
 	"github.com/tyler-smith/go-bip32"
 )
 
-type WalletAPI interface {
-	CreateWallet(passphrase string) error
-	ImportWallet(mode ImportMode, input []byte, passphrase string) error
-	ExportWallet(mode ExportMode, passphrase string) ([]byte, error)
-	PublicKey() (string, error)
-	SignTransaction() ([]byte, error)
-	DeleteWallet(passphrase string) error
-}
-
 type WalletUI interface {
 	EnterPassphrase() (string, error)
 }
