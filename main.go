@@ -373,23 +373,58 @@ func executeAppSoundminterAutomint(args []string) {
 	}
 
 	rpcEndpoint := findArg(args, "--rpc=")
+	walletArg := findArg(args, "--wallet=")
+	passphrase := findArg(args, "--pwd=")
 
 	if rpcEndpoint == nil {
 		fmt.Println("--rpc parameter is required")
 		return
 	}
+	if passphrase == nil {
+		fmt.Println("--pwd parameter is required")
+		return
+	}
+	if walletArg == nil {
+		fmt.Println("--wallet parameter is required")
+		return
+	}
+	walletIndex, err := strconv.Atoi(*walletArg)
+	if err != nil {
+		fmt.Println("--wallet parameter must be a valid integer")
+		return
+	}
+
+	wallet, err := wallet.NewWalletKeeper(walletCLI, true)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
 	soundminter, err := soundminter.NewSoundminter(
 		*rpcEndpoint,
-		walletCLI,
-		common.HexToAddress("0xd19a5eE68e2ED7C19d509b6F4EcAd7409e79Ad58"),
+		wallet,
+		common.HexToAddress("Master contract address"),
+		common.HexToAddress("Edition address"),
 	)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	_, err = soundminter.Automint()
+	pubkey, err := wallet.PublicKey(walletIndex)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	err = wallet.Unlock(walletIndex, *passphrase)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	fmt.Println()
+	_, err = soundminter.Automint(common.HexToAddress(pubkey))
 	if err != nil {
 		fmt.Println(err)
 	}

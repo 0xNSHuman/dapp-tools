@@ -4,13 +4,17 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"math/big"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/0xNSHuman/dapp-tools/client"
 	"github.com/0xNSHuman/dapp-tools/http"
+	"github.com/0xNSHuman/dapp-tools/schedule"
 	"github.com/0xNSHuman/dapp-tools/utils"
 	"github.com/0xNSHuman/dapp-tools/wallet"
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -19,10 +23,6 @@ import (
 )
 
 type EventField_MerkleDropMintCreated uint16
-
-const (
-	merkleDropMinterAddressHex = "0xeae422887230c0ffb91fd8f708f5fdd354c92f2f"
-)
 
 const (
 	EventField_MerkleDropMintCreated_EventName EventField_MerkleDropMintCreated = iota
@@ -43,23 +43,20 @@ type MerkleProofResponse struct {
 }
 
 type Soundminter struct {
-	editionAddress common.Address
-	abi            abi.ABI
-	client         *client.Client
-	wallet         *wallet.WalletKeeper
+	merkleDropMinterAddress common.Address
+	editionAddress          common.Address
+	abi                     abi.ABI
+	client                  *client.Client
+	wallet                  *wallet.WalletKeeper
 }
 
 func NewSoundminter(
 	rpcEndpoint string,
-	walletUI wallet.WalletUI,
+	wallet *wallet.WalletKeeper,
+	merkleDropMinterAddress common.Address,
 	editionAddress common.Address,
 ) (*Soundminter, error) {
 	client, err := client.NewClient(rpcEndpoint)
-	if err != nil {
-		return nil, err
-	}
-
-	wallet, err := wallet.NewWalletKeeper(walletUI)
 	if err != nil {
 		return nil, err
 	}
@@ -85,14 +82,20 @@ func NewSoundminter(
 	}
 
 	return &Soundminter{
-		editionAddress: editionAddress,
-		abi:            abi,
-		client:         client,
-		wallet:         wallet,
+		merkleDropMinterAddress: merkleDropMinterAddress,
+		editionAddress:          editionAddress,
+		abi:                     abi,
+		client:                  client,
+		wallet:                  wallet,
 	}, nil
 }
 
-func (sm *Soundminter) Automint() (*string, error) {
+func (sm *Soundminter) Automint(minterAddress common.Address) (*string, error) {
+	blockNum, err := sm.client.EthClient.BlockNumber(context.Background())
+	if err != nil {
+		return nil, err
+	}
+
 	// Step 1:
 	//		Source mint details from the edition contract deployment logs:
 	//			- mintId
@@ -100,16 +103,11 @@ func (sm *Soundminter) Automint() (*string, error) {
 	//			- merkle root hash
 	//			- start time (as UNIX timestamp, not block num)
 
-	blockNum, err := sm.client.EthClient.BlockNumber(context.Background())
-	if err != nil {
-		return nil, err
-	}
-
 	logs, err := sm.client.ReadLogs(
 		big.NewInt(int64(blockNum-216_000)), // Last 30 days lookup
 		big.NewInt(int64(blockNum)),
 		sm.abi,
-		common.HexToAddress(merkleDropMinterAddressHex),
+		common.HexToAddress(sm.merkleDropMinterAddress.Hex()),
 		[][]string{
 			// Topic 0 targets
 			{
@@ -123,6 +121,10 @@ func (sm *Soundminter) Automint() (*string, error) {
 	)
 	if err != nil {
 		return nil, err
+	}
+
+	if len(logs) == 0 {
+		return nil, errors.New("failed to load the mint info on-chain")
 	}
 
 	// Trim leading zeros but leave the '0x' prefix
@@ -140,23 +142,17 @@ func (sm *Soundminter) Automint() (*string, error) {
 	price := logs[EventField_MerkleDropMintCreated_Price].(*big.Int)
 
 	startTimestamp := logs[EventField_MerkleDropMintCreated_StartTime].(uint32)
-	_ = startTimestamp
 
 	// Step 2:
 	//		Get the merkle proof from for the currently stored wallet
 	// 		using the off-chain service where it's stored
-
-	pubkey, err := sm.wallet.PublicKey()
-	if err != nil {
-		return nil, err
-	}
 
 	var proofResponse MerkleProofResponse
 	query := strings.Join(
 		[]string{
 			"https://lanyard.org/api/v1/proof",
 			"?root=", merkleRootHash,
-			"&unhashedLeaf=", pubkey,
+			"&unhashedLeaf=", minterAddress.Hex(),
 		},
 		"",
 	)
@@ -168,22 +164,156 @@ func (sm *Soundminter) Automint() (*string, error) {
 	merkleProofBytes := make([][32]byte, len(proofResponse.Proof))
 
 	for i, hash := range proofResponse.Proof {
-		bytes, _ := hex.DecodeString(strings.Trim(hash, "0x"))
+		byteRow, _ := hex.DecodeString(strings.TrimPrefix(hash, "0x"))
 		bytes32 := new([32]byte)
-		copy(bytes32[:], bytes)
+		copy(bytes32[:], byteRow)
 		merkleProofBytes[i] = *bytes32
 	}
 
-	// Step 3:
-	//		Fire the mint TX
+	fmt.Println("===== MINT DATA LOADED =====")
+	fmt.Println("Contract address:        ", sm.merkleDropMinterAddress.Hex())
+	fmt.Println("Edition address:         ", sm.editionAddress.Hex())
+	fmt.Println("Mint ID:                 ", mintId)
+	fmt.Println("Merkle root hash:        ", merkleRootHash)
+	fmt.Println("Mint price:              ", price)
+	fmt.Println("Mint start UNIX time:    ", startTimestamp)
+	fmt.Println("Minter wallet:           ", minterAddress.Hex())
+	fmt.Println("Merkle proof:			  ")
+	for _, proofByteRow := range merkleProofBytes {
+		fmt.Println(common.Bytes2Hex(proofByteRow[:]))
+	}
+	fmt.Println()
 
-	return sm.mint(
-		sm.editionAddress,
-		mintId,
-		uint32(1),
-		merkleProofBytes,
-		price,
+	// Step 3:
+	//		Wait for the valid block to mint in
+
+	_, err = sm.waitForBlockAfterTimestamp(uint64(startTimestamp))
+	if err != nil {
+		return nil, err
+	}
+
+	// Step 4:
+	//		Fire the mint TX sequence
+	//		Make X attempts every Y seconds for every Z wallets
+
+	var attemptsNum = 10
+
+	for {
+		txHash, err := sm.makeMintAttempt(
+			sm.editionAddress,
+			minterAddress,
+			mintId,
+			uint32(1),
+			merkleProofBytes,
+			price,
+		)
+		if err != nil {
+			attemptsNum -= 1
+
+			if attemptsNum == 0 {
+				return nil, err
+			}
+
+			fmt.Println("Mint attempt failed:", err)
+			fmt.Println("Making", attemptsNum, "more attempts in 1 second..")
+			time.Sleep(time.Second * 1)
+		} else {
+			return txHash, nil
+		}
+	}
+}
+
+// Wait for a block with the target UNIX timestamp
+func (sm *Soundminter) waitForBlockAfterTimestamp(targetTimestamp uint64) (uint64, error) {
+	type BlockWaitResult struct {
+		blockNum  uint64
+		timestamp uint64
+		err       error
+	}
+
+	var lastBlockNum uint64 = 0
+	blockWaitResult := make(chan BlockWaitResult)
+
+	fmt.Println("Waiting for a block coming after timestamp", targetTimestamp, "...")
+
+	job, _ := Scheduler().AddJob(
+		schedule.NewPeriodicJobConfig(time.Second*2),
+		func() {
+			blockNum, err := sm.client.EthClient.BlockNumber(context.Background())
+			if err != nil {
+				blockWaitResult <- BlockWaitResult{0, 0, err}
+			}
+
+			header, err := sm.client.EthClient.HeaderByNumber(context.Background(), big.NewInt(int64(blockNum)))
+			if err != nil {
+				blockWaitResult <- BlockWaitResult{0, 0, err}
+			}
+
+			if header.Time >= targetTimestamp {
+				blockWaitResult <- BlockWaitResult{blockNum, header.Time, err}
+				close(blockWaitResult)
+				return
+			}
+
+			if blockNum > lastBlockNum {
+				lastBlockNum = blockNum
+				fmt.Println(
+					"Block", blockNum, "has timestamp", header.Time, "<", targetTimestamp,
+				)
+			}
+		},
 	)
+
+	waitResult := <-blockWaitResult
+	Scheduler().CancelJob(job.ID)
+	if waitResult.err != nil {
+		return 0, waitResult.err
+	}
+
+	fmt.Println(
+		"Block", waitResult.blockNum, "has timestamp", waitResult.timestamp, ">=", targetTimestamp,
+	)
+	fmt.Println("Found the block!")
+	fmt.Println()
+
+	return waitResult.blockNum, nil
+}
+
+func (sm *Soundminter) makeMintAttempt(
+	editionAddress common.Address,
+	minterAddress common.Address,
+	mintId *big.Int,
+	requestedQuantity uint32,
+	merkleProof [][32]byte,
+	price *big.Int,
+) (*string, error) {
+	type MintResult struct {
+		txHash *string
+		err    error
+	}
+
+	mintResultCh := make(chan MintResult)
+
+	Scheduler().AddJob(
+		schedule.NewPrimitiveJobConfig(),
+		func() {
+			txHash, err := sm.mint(
+				editionAddress,
+				minterAddress,
+				mintId,
+				requestedQuantity,
+				merkleProof,
+				price,
+			)
+			if err != nil {
+				mintResultCh <- MintResult{nil, err}
+			}
+			mintResultCh <- MintResult{txHash, nil}
+		},
+	)
+
+	mintResult := <-mintResultCh
+	return mintResult.txHash, mintResult.err
 }
 
 // The contract mint function invoker.
@@ -199,18 +329,15 @@ func (sm *Soundminter) Automint() (*string, error) {
 //	price				Mint price.
 func (sm *Soundminter) mint(
 	editionAddress common.Address,
+	minterAddress common.Address,
 	mintId *big.Int,
 	requestedQuantity uint32,
 	merkleProof [][32]byte,
 	price *big.Int,
 ) (*string, error) {
-	pubkey, err := sm.wallet.PublicKey()
-	if err != nil {
-		return nil, err
-	}
+	fmt.Println("Minting...")
 
-	from := common.HexToAddress(pubkey)
-	to := common.HexToAddress(merkleDropMinterAddressHex)
+	to := common.HexToAddress(sm.merkleDropMinterAddress.Hex())
 	value := price
 
 	callData, err := sm.abi.Pack(
@@ -225,7 +352,7 @@ func (sm *Soundminter) mint(
 		return nil, err
 	}
 
-	tx, err := utils.EncodeTransaction(sm.client, from, to, value, callData)
+	tx, err := utils.EncodeTransaction(sm.client, minterAddress, to, value, callData, 2.0)
 	if err != nil {
 		return nil, err
 	}
@@ -235,7 +362,7 @@ func (sm *Soundminter) mint(
 		return nil, err
 	}
 
-	signedTx, err := sm.wallet.SignTransaction(chainId, tx)
+	signedTx, err := sm.wallet.SignTransaction(chainId, tx, minterAddress, true)
 	if err != nil {
 		return nil, err
 	}
@@ -244,6 +371,9 @@ func (sm *Soundminter) mint(
 	if err != nil {
 		return nil, err
 	}
+
+	fmt.Println("Minted! Transaction hash:", *txHash)
+	fmt.Println()
 
 	return txHash, nil
 }
