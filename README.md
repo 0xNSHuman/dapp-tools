@@ -6,7 +6,6 @@ These are tools I'm creating for the ongoing and future projects I'm involved in
 
 ```ml
 dapp-tools
-├── apps        "Fun apps for testing (to be removed)"
 ├── client      "EVM node client"
 ├── common      "Common definitions used in other packages"
 ├── http        "Data I/O via HTTP"
