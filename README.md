@@ -9,6 +9,7 @@ dapp-tools
 ├── client      "EVM node client"
 ├── common      "Common definitions used in other packages"
 ├── http        "Data I/O via HTTP"
+├── mobile      "Wrappers/Interfaces compatible with mobile platforms"
 ├── schedule    "Job scheduling and async processing"
 ├── ui          "User interface implementations"
 ├── utils       "Reusable helpers used in other packages"
